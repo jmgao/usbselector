@@ -1,0 +1,28 @@
+[package]
+name = "usbselector"
+version = "0.1.0"
+authors = ["Josh Gao <josh@jmgao.dev>"]
+edition = "2024"
+description = "CSS selectors for USB devices"
+repository = "https://github.com/jmgao/usbselector"
+license = "Apache-2.0"
+keywords = ["usb"]
+
+[lib]
+name = "usbselector"
+path = "src/lib.rs"
+doctest = false
+
+[[bin]]
+name = "usbselector"
+path = "src/bin.rs"
+test = false
+
+[features]
+default = ["rusb"]
+rusb = ["dep:rusb"]
+
+[dependencies]
+winnow = "1.0.3"
+
+rusb = { version = "0.9.4", optional = true }
