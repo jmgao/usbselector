@@ -22,7 +22,7 @@ fn main() {
   let context = rusb::Context::new().unwrap();
   let devices = context.devices().unwrap();
 
-  let nodes = Node::from_devices(&context, devices.iter());
+  let nodes = Node::from_devices(&context, devices.iter(), true);
 
   if let Some(selector) = selector {
     let selected = selector.select(&nodes);

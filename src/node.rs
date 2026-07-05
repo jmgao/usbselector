@@ -171,6 +171,7 @@ impl<T: rusb::UsbContext> Node<rusb::Device<T>> {
     device: rusb::Device<T>,
     bus_address: BusAddress,
     children: BTreeMap<PortNumber, Rc<Node<rusb::Device<T>>>>,
+    populate_strings: bool,
   ) -> rusb::Result<Self> {
     let descriptor = device.device_descriptor()?;
     let class_code = descriptor.class_code();
@@ -184,12 +185,16 @@ impl<T: rusb::UsbContext> Node<rusb::Device<T>> {
     let vendor_id = descriptor.vendor_id();
     let product_id = descriptor.product_id();
 
-    // Try to get string descriptors (these may fail if device can't be opened)
-    let (manufacturer, product, serial_number) = if let Ok(handle) = device.open() {
-      let manufacturer = handle.read_manufacturer_string_ascii(&descriptor).ok();
-      let product = handle.read_product_string_ascii(&descriptor).ok();
-      let serial_number = handle.read_serial_number_string_ascii(&descriptor).ok();
-      (manufacturer, product, serial_number)
+    // Try to get string descriptors only if requested (may fail or cause latency)
+    let (manufacturer, product, serial_number) = if populate_strings {
+      if let Ok(handle) = device.open() {
+        let manufacturer = handle.read_manufacturer_string_ascii(&descriptor).ok();
+        let product = handle.read_product_string_ascii(&descriptor).ok();
+        let serial_number = handle.read_serial_number_string_ascii(&descriptor).ok();
+        (manufacturer, product, serial_number)
+      } else {
+        (None, None, None)
+      }
     } else {
       (None, None, None)
     };
@@ -212,6 +217,7 @@ impl<T: rusb::UsbContext> Node<rusb::Device<T>> {
     raw: *mut libusb_device,
     bus_address: BusAddress,
     all_children: &HashMap<*mut libusb_device, BTreeMap<PortNumber, *mut libusb_device>>,
+    populate_strings: bool,
   ) -> rusb::Result<Node<rusb::Device<T>>> {
     let device = unsafe { rusb::Device::from_libusb(context.clone(), NonNull::new(raw).unwrap()) };
 
@@ -220,15 +226,19 @@ impl<T: rusb::UsbContext> Node<rusb::Device<T>> {
       for (port, child) in children {
         let mut bus_address = bus_address.clone();
         bus_address.push(*port);
-        let child_node = Node::from_raw(context.clone(), *child, bus_address, all_children)?;
+        let child_node = Node::from_raw(context.clone(), *child, bus_address, all_children, populate_strings)?;
         node_children.insert(*port, Rc::new(child_node));
       }
     };
 
-    Node::new(device, bus_address, node_children)
+    Node::new(device, bus_address, node_children, populate_strings)
   }
 
-  pub fn from_devices(context: &T, it: rusb::Devices<T>) -> BTreeMap<PortNumber, Rc<Node<rusb::Device<T>>>> {
+  pub fn from_devices(
+    context: &T,
+    it: rusb::Devices<T>,
+    populate_strings: bool,
+  ) -> BTreeMap<PortNumber, Rc<Node<rusb::Device<T>>>> {
     let mut roots = BTreeMap::new();
     let mut children: HashMap<*mut libusb_device, BTreeMap<PortNumber, *mut libusb_device>> = HashMap::new();
 
@@ -255,7 +265,7 @@ impl<T: rusb::UsbContext> Node<rusb::Device<T>> {
 
     let mut result = BTreeMap::new();
     for (port, root) in roots {
-      match Node::from_raw(context.clone(), root, vec![port], &children) {
+      match Node::from_raw(context.clone(), root, vec![port], &children, populate_strings) {
         Ok(node) => {
           result.insert(port, Rc::new(node));
         }
